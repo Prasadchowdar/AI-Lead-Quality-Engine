@@ -289,6 +289,14 @@ async def get_leads():
     
     return sorted_leads
 
+@api_router.delete("/leads")
+async def clear_all_leads():
+    """Clear all leads from in-memory storage"""
+    global leads_db
+    count = len(leads_db)
+    leads_db = []
+    return {"success": True, "message": f"Cleared {count} leads"}
+
 @api_router.get("/leads/{lead_id}", response_model=LeadWithMessages)
 async def get_lead_with_messages(lead_id: str):
     """Get lead with AI-generated messages"""

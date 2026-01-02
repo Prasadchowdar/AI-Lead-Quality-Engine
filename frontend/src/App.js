@@ -98,6 +98,21 @@ const App = () => {
     }
   };
 
+  const handleClearLeads = async () => {
+    if (!window.confirm("Are you sure you want to clear all leads?")) return;
+
+    try {
+      const response = await axios.delete(`${API}/leads`);
+      toast.success(response.data.message, {
+        style: { background: '#0f0f15', border: '1px solid rgba(255, 107, 107, 0.3)', color: '#fff' }
+      });
+      fetchLeads();
+      fetchStats();
+    } catch (error) {
+      toast.error("Failed to clear leads");
+    }
+  };
+
   const handleLeadClick = async (lead) => {
     setSelectedLead(lead);
     setAiMessages(null);
@@ -372,6 +387,14 @@ const App = () => {
                 {leads.length} leads
               </span>
             </div>
+            {leads.length > 0 && (
+              <button
+                onClick={handleClearLeads}
+                className="px-4 py-2 text-sm font-medium text-[#ff6b6b] bg-[rgba(255,107,107,0.1)] hover:bg-[rgba(255,107,107,0.2)] border border-[rgba(255,107,107,0.2)] rounded-xl transition-all hover:scale-105"
+              >
+                Clear All
+              </button>
+            )}
           </div>
 
           <div className="glass-card overflow-hidden">
