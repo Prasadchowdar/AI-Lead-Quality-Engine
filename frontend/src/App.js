@@ -345,7 +345,7 @@ const App = () => {
                 <SheetTitle className="text-2xl font-bold" style={{ fontFamily: 'Manrope, sans-serif' }}>
                   {selectedLead.name}
                 </SheetTitle>
-                <SheetDescription>
+                <SheetDescription asChild>
                   <div className="space-y-3 mt-4">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-600">Lead Score:</span>
@@ -372,11 +372,11 @@ const App = () => {
                       </span>
                     </div>
                     <div className="pt-3 border-t border-slate-200">
-                      <p className="text-sm text-slate-600"><strong>Phone:</strong> {selectedLead.phone}</p>
-                      {selectedLead.email && <p className="text-sm text-slate-600"><strong>Email:</strong> {selectedLead.email}</p>}
-                      <p className="text-sm text-slate-600"><strong>Service:</strong> {selectedLead.service_interest}</p>
-                      <p className="text-sm text-slate-600"><strong>Source:</strong> {selectedLead.source}</p>
-                      <p className="text-sm text-slate-600"><strong>Location:</strong> {selectedLead.location}</p>
+                      <div className="text-sm text-slate-600"><strong>Phone:</strong> {selectedLead.phone}</div>
+                      {selectedLead.email && <div className="text-sm text-slate-600"><strong>Email:</strong> {selectedLead.email}</div>}
+                      <div className="text-sm text-slate-600"><strong>Service:</strong> {selectedLead.service_interest}</div>
+                      <div className="text-sm text-slate-600"><strong>Source:</strong> {selectedLead.source}</div>
+                      <div className="text-sm text-slate-600"><strong>Location:</strong> {selectedLead.location}</div>
                     </div>
                   </div>
                 </SheetDescription>
