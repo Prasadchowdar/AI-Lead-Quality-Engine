@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-01-02T11:47:13.694288",
+  "total_tests": 5,
+  "passed_tests": 5,
+  "success_rate": "100.0%",
+  "test_results": [
+    {
+      "test": "Dashboard API",
+      "success": true,
+      "details": "Total leads: 0"
+    },
+    {
+      "test": "Get Leads API",
+      "success": true,
+      "details": "Retrieved 0 leads"
+    },
+    {
+      "test": "CSV Upload API",
+      "success": true,
+      "details": "Uploaded 1 leads"
+    },
+    {
+      "test": "Lead Details API with AI Messages",
+      "success": true,
+      "details": "Generated AI messages for lead 142d02e4-017c-4784-9ebb-66df76ecb9f9"
+    },
+    {
+      "test": "Delete Leads API",
+      "success": true,
+      "details": "Deleted 1 leads"
+    }
+  ]
+}
