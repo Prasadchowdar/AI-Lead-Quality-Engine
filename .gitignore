@@ -46,6 +46,10 @@ dist
 backend/.env
 frontend/.env
 
+# Allow example env files for documentation
+!.env.example
+!**/.env.example
+
 *token.json*
 *credentials.json*
 
