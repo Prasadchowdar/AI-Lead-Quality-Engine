@@ -86,9 +86,30 @@ const App = () => {
     }
   };
 
-  const copyToClipboard = (text, type) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${type} copied to clipboard`);
+  const copyToClipboard = async (text, type) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        toast.success(`${type} copied to clipboard`);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand("copy");
+          toast.success(`${type} copied to clipboard`);
+        } catch (err) {
+          toast.error("Failed to copy to clipboard");
+        }
+        document.body.removeChild(textArea);
+      }
+    } catch (err) {
+      toast.error("Failed to copy to clipboard");
+    }
   };
 
   const getCategoryBadgeClass = (category) => {
