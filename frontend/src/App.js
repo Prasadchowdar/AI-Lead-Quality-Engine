@@ -1,23 +1,51 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import "@/App.css";
 import axios from "axios";
-import Papa from "papaparse";
-import { Upload, LayoutDashboard, Users, TrendingUp, Clock, Copy, CheckCircle2, Mail, MessageSquare, Phone } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { Upload, LayoutDashboard, Users, TrendingUp, Clock, Copy, Mail, MessageSquare, Phone, Zap, Flame, Snowflake, Sparkles, ArrowUpRight } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-const COLORS = ['#4f46e5', '#059669', '#d97706', '#64748b', '#f59e0b'];
+// Premium chart colors
+const CHART_COLORS = ['#667eea', '#f093fb', '#5ee7df', '#feca57', '#ff6b6b'];
+
+// Floating particles
+const Particles = () => {
+  const particles = Array.from({ length: 30 }, (_, i) => ({
+    id: i,
+    left: `${Math.random() * 100}%`,
+    delay: `${Math.random() * 15}s`,
+    duration: `${15 + Math.random() * 10}s`,
+    size: `${2 + Math.random() * 4}px`,
+  }));
+
+  return (
+    <div className="particles">
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          className="particle"
+          style={{
+            left: p.left,
+            width: p.size,
+            height: p.size,
+            animationDelay: p.delay,
+            animationDuration: p.duration,
+          }}
+        />
+      ))}
+    </div>
+  );
+};
 
 const App = () => {
   const [leads, setLeads] = useState([]);
   const [stats, setStats] = useState(null);
   const [selectedLead, setSelectedLead] = useState(null);
   const [aiMessages, setAiMessages] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -57,12 +85,13 @@ const App = () => {
       const response = await axios.post(`${API}/leads/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      toast.success(response.data.message);
+      toast.success(response.data.message, {
+        style: { background: '#0f0f15', border: '1px solid rgba(102, 126, 234, 0.3)', color: '#fff' }
+      });
       fetchLeads();
       fetchStats();
     } catch (error) {
       toast.error("Failed to upload leads");
-      console.error("Upload error:", error);
     } finally {
       setUploading(false);
       event.target.value = "";
@@ -80,7 +109,6 @@ const App = () => {
       setAiMessages(response.data.ai_messages);
     } catch (error) {
       toast.error("Failed to generate AI messages");
-      console.error("Error fetching AI messages:", error);
     } finally {
       setLoadingMessages(false);
     }
@@ -88,40 +116,31 @@ const App = () => {
 
   const copyToClipboard = async (text, type) => {
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-        toast.success(`${type} copied to clipboard`);
-      } else {
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-          document.execCommand("copy");
-          toast.success(`${type} copied to clipboard`);
-        } catch (err) {
-          toast.error("Failed to copy to clipboard");
-        }
-        document.body.removeChild(textArea);
-      }
-    } catch (err) {
-      toast.error("Failed to copy to clipboard");
+      await navigator.clipboard.writeText(text);
+      toast.success(`${type} copied!`, {
+        style: { background: '#0f0f15', border: '1px solid rgba(102, 126, 234, 0.3)', color: '#fff' }
+      });
+    } catch {
+      toast.error("Failed to copy");
     }
   };
 
-  const getCategoryBadgeClass = (category) => {
-    if (category === "Hot") return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    if (category === "Warm") return "bg-amber-100 text-amber-800 border-amber-200";
-    return "bg-slate-100 text-slate-800 border-slate-200";
-  };
-
-  const getCategoryIcon = (category) => {
-    if (category === "Hot") return "🔥";
-    if (category === "Warm") return "⚡";
-    return "❄️";
+  const getCategoryConfig = (category) => {
+    if (category === "Hot") return {
+      badge: "badge-hot",
+      icon: <Flame className="w-4 h-4" />,
+      scoreClass: "bg-gradient-to-br from-[rgba(238,90,36,0.3)] to-[rgba(255,107,107,0.2)] text-[#ff6b6b] score-hot"
+    };
+    if (category === "Warm") return {
+      badge: "badge-warm",
+      icon: <Zap className="w-4 h-4" />,
+      scoreClass: "bg-gradient-to-br from-[rgba(255,159,67,0.3)] to-[rgba(254,202,87,0.2)] text-[#feca57] score-warm"
+    };
+    return {
+      badge: "badge-cold",
+      icon: <Snowflake className="w-4 h-4" />,
+      scoreClass: "bg-gradient-to-br from-[rgba(108,117,125,0.2)] to-[rgba(173,181,189,0.1)] text-[#adb5bd]"
+    };
   };
 
   const sourceChartData = stats
@@ -129,328 +148,409 @@ const App = () => {
     : [];
 
   return (
-    <div className="App min-h-screen bg-slate-50" data-testid="lead-quality-engine">
-      <div className="max-w-7xl mx-auto p-6 md:p-8 lg:p-12">
-        <header className="mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-2" style={{ fontFamily: 'Manrope, sans-serif' }}>
-            AI Lead Quality Engine
-          </h1>
-          <p className="text-slate-600 text-lg">Score, categorize, and convert your marketing leads instantly</p>
-        </header>
+    <div className="min-h-screen relative" data-testid="lead-quality-engine">
+      {/* Animated Aurora Background */}
+      <div className="aurora-bg" />
+      <Particles />
 
-        <div className="mb-8" data-testid="upload-section">
-          <div className="bg-white rounded-lg border border-slate-200 p-8 upload-dropzone">
-            <div className="flex flex-col items-center justify-center">
-              <Upload className="w-12 h-12 text-slate-400 mb-4" />
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Upload Lead CSV</h3>
-              <p className="text-sm text-slate-500 mb-4 text-center">
-                Required columns: name, phone, email, source, service_interest, location, timestamp
-              </p>
-              <label
-                htmlFor="file-upload"
-                className="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-3 rounded-md"
-                data-testid="upload-button"
-              >
-                {uploading ? "Uploading..." : "Choose File"}
-              </label>
-              <input
-                id="file-upload"
-                type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
-                className="hidden"
-                disabled={uploading}
-              />
+      <div className="relative z-10 max-w-7xl mx-auto px-6 py-16 md:px-8 lg:px-12">
+
+        {/* Hero Header */}
+        <header className="mb-20 animate-fade-in-up">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#667eea] to-[#764ba2] flex items-center justify-center shadow-[0_0_40px_rgba(102,126,234,0.5)]">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+              <div className="absolute -inset-1 bg-gradient-to-br from-[#667eea] to-[#f093fb] opacity-30 blur-xl rounded-2xl -z-10" />
+            </div>
+            <div>
+              <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#667eea]">Lead Forge AI</span>
+              <p className="text-[#71717a] text-sm">Intelligent Lead Intelligence Platform</p>
             </div>
           </div>
-        </div>
 
+          <h1 className="mb-6">
+            Transform Every Lead Into<br />
+            <span className="text-gradient-animated">Revenue Gold</span>
+          </h1>
+
+          <p className="text-[#a1a1aa] text-xl max-w-2xl leading-relaxed">
+            Harness AI-powered scoring, smart categorization, and personalized outreach
+            to maximize your conversion potential.
+          </p>
+        </header>
+
+        {/* Upload Section */}
+        <section className="mb-16 animate-fade-in-up delay-1" data-testid="upload-section">
+          <div className="upload-dropzone">
+            <div className="upload-icon-wrapper">
+              <Upload className="w-10 h-10 text-white relative z-10" />
+            </div>
+            <h3 className="text-2xl text-white mb-3" style={{ fontFamily: 'Space Grotesk' }}>
+              Import Your Leads
+            </h3>
+            <p className="text-[#71717a] text-sm mb-8 max-w-md mx-auto">
+              Upload your CSV file with lead data. We'll instantly analyze, score, and categorize each lead.
+            </p>
+            <label htmlFor="file-upload" className="btn-premium cursor-pointer inline-flex items-center gap-2">
+              {uploading ? (
+                <>
+                  <div className="spinner" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-5 h-5" />
+                  Upload CSV File
+                </>
+              )}
+            </label>
+            <input
+              id="file-upload"
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              className="hidden"
+              disabled={uploading}
+            />
+            <p className="text-[#52525b] text-xs mt-6">
+              Required: name, phone, source, service_interest, location, timestamp
+            </p>
+          </div>
+        </section>
+
+        {/* Dashboard Stats */}
         {stats && (
-          <div className="mb-8" data-testid="dashboard-summary">
-            <h2 className="text-2xl font-bold text-slate-900 mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
-              <LayoutDashboard className="inline-block w-6 h-6 mr-2" />
-              Dashboard Overview
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <div className="stat-card bg-white rounded-lg border border-slate-200 p-6" data-testid="total-leads-card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-600 mb-1">Total Leads</p>
-                    <p className="text-3xl font-bold text-slate-900 font-data">{stats.total_leads}</p>
+          <section className="mb-16 animate-fade-in-up delay-2" data-testid="dashboard-summary">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#667eea]/20 to-[#764ba2]/10 flex items-center justify-center">
+                <LayoutDashboard className="w-5 h-5 text-[#667eea]" />
+              </div>
+              <h2 className="text-white" style={{ fontFamily: 'Space Grotesk' }}>Intelligence Dashboard</h2>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
+              {/* Total Leads */}
+              <div className="stat-card animate-fade-in-scale delay-1">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#667eea]/20 to-[#764ba2]/10 flex items-center justify-center">
+                    <Users className="w-7 h-7 text-[#667eea]" />
                   </div>
-                  <Users className="w-10 h-10 text-indigo-600" />
+                  <ArrowUpRight className="w-5 h-5 text-[#52525b]" />
                 </div>
+                <p className="text-[#71717a] text-sm mb-1">Total Leads</p>
+                <p className="text-4xl font-bold text-white font-data">{stats.total_leads}</p>
               </div>
 
-              <div className="stat-card bg-white rounded-lg border border-slate-200 p-6" data-testid="hot-leads-card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-600 mb-1">🔥 Hot Leads</p>
-                    <p className="text-3xl font-bold text-emerald-600 font-data">{stats.hot_count}</p>
+              {/* Hot Leads */}
+              <div className="stat-card animate-fade-in-scale delay-2" style={{ '--glow-color': 'rgba(238, 90, 36, 0.3)' }}>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#ee5a24]/20 to-[#ff6b6b]/10 flex items-center justify-center">
+                    <Flame className="w-7 h-7 text-[#ff6b6b]" />
                   </div>
-                  <div className="text-4xl">🔥</div>
+                  <span className="px-2 py-1 rounded-full bg-[rgba(238,90,36,0.15)] text-[#ff6b6b] text-xs font-semibold">
+                    Priority
+                  </span>
                 </div>
+                <p className="text-[#71717a] text-sm mb-1">Hot Leads</p>
+                <p className="text-4xl font-bold text-[#ff6b6b] font-data">{stats.hot_count}</p>
               </div>
 
-              <div className="stat-card bg-white rounded-lg border border-slate-200 p-6" data-testid="warm-leads-card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-600 mb-1">⚡ Warm Leads</p>
-                    <p className="text-3xl font-bold text-amber-600 font-data">{stats.warm_count}</p>
+              {/* Warm Leads */}
+              <div className="stat-card animate-fade-in-scale delay-3">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#ff9f43]/20 to-[#feca57]/10 flex items-center justify-center">
+                    <Zap className="w-7 h-7 text-[#feca57]" />
                   </div>
-                  <div className="text-4xl">⚡</div>
                 </div>
+                <p className="text-[#71717a] text-sm mb-1">Warm Leads</p>
+                <p className="text-4xl font-bold text-[#feca57] font-data">{stats.warm_count}</p>
               </div>
 
-              <div className="stat-card bg-white rounded-lg border border-slate-200 p-6" data-testid="cold-leads-card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-600 mb-1">❄️ Cold Leads</p>
-                    <p className="text-3xl font-bold text-slate-600 font-data">{stats.cold_count}</p>
+              {/* Cold Leads */}
+              <div className="stat-card animate-fade-in-scale delay-4">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#6c757d]/20 to-[#adb5bd]/10 flex items-center justify-center">
+                    <Snowflake className="w-7 h-7 text-[#adb5bd]" />
                   </div>
-                  <div className="text-4xl">❄️</div>
                 </div>
+                <p className="text-[#71717a] text-sm mb-1">Cold Leads</p>
+                <p className="text-4xl font-bold text-[#adb5bd] font-data">{stats.cold_count}</p>
               </div>
             </div>
 
+            {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg border border-slate-200 p-6" data-testid="source-distribution-chart">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Lead Source Distribution</h3>
-                <ResponsiveContainer width="100%" height={250}>
+              {/* Source Distribution */}
+              <div className="glass-card p-8 animate-fade-in-up delay-3">
+                <h3 className="text-white text-lg mb-6" style={{ fontFamily: 'Space Grotesk' }}>
+                  Lead Source Analysis
+                </h3>
+                <ResponsiveContainer width="100%" height={240}>
                   <PieChart>
                     <Pie
                       data={sourceChartData}
                       cx="50%"
                       cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={4}
                       dataKey="value"
                     >
-                      {sourceChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      {sourceChartData.map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={CHART_COLORS[index % CHART_COLORS.length]}
+                          stroke="transparent"
+                        />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip
+                      contentStyle={{
+                        background: 'rgba(15, 15, 21, 0.95)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '12px',
+                        color: '#fff',
+                        backdropFilter: 'blur(10px)'
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
+                <div className="flex flex-wrap justify-center gap-4 mt-4">
+                  {sourceChartData.map((entry, index) => (
+                    <div key={entry.name} className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full shadow-sm"
+                        style={{
+                          background: CHART_COLORS[index % CHART_COLORS.length],
+                          boxShadow: `0 0 10px ${CHART_COLORS[index % CHART_COLORS.length]}40`
+                        }}
+                      />
+                      <span className="text-[#a1a1aa] text-sm">{entry.name}</span>
+                      <span className="text-[#52525b] text-xs">({entry.value})</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-slate-200 p-6" data-testid="best-time-card">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                  <Clock className="inline-block w-5 h-5 mr-2" />
-                  Best Time to Reach
-                </h3>
-                <div className="flex items-center justify-center h-48">
+              {/* Peak Activity */}
+              <div className="glass-card p-8 animate-fade-in-up delay-4">
+                <div className="flex items-center gap-2 mb-6">
+                  <Clock className="w-5 h-5 text-[#5ee7df]" />
+                  <h3 className="text-white text-lg" style={{ fontFamily: 'Space Grotesk' }}>
+                    Peak Activity Window
+                  </h3>
+                </div>
+                <div className="flex items-center justify-center h-52">
                   <div className="text-center">
-                    <div className="text-6xl mb-4">🕐</div>
-                    <p className="text-2xl font-bold text-indigo-600">{stats.best_time_of_day}</p>
-                    <p className="text-sm text-slate-500 mt-2">Peak lead activity time</p>
+                    <div className="relative inline-block mb-6">
+                      <div className="w-28 h-28 rounded-3xl bg-gradient-to-br from-[#5ee7df]/20 to-[#b490ca]/10 flex items-center justify-center">
+                        <Clock className="w-14 h-14 text-[#5ee7df]" />
+                      </div>
+                      <div className="absolute -inset-3 bg-gradient-to-br from-[#5ee7df]/20 to-transparent blur-2xl -z-10 rounded-full" />
+                    </div>
+                    <p className="text-2xl font-bold text-white font-data mb-1">{stats.best_time_of_day}</p>
+                    <p className="text-[#71717a] text-sm">Optimal time to reach leads</p>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
         )}
 
-        <div data-testid="lead-table-section">
-          <h2 className="text-2xl font-bold text-slate-900 mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
-            <TrendingUp className="inline-block w-6 h-6 mr-2" />
-            All Leads ({leads.length})
-          </h2>
-          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+        {/* Leads Table */}
+        <section className="animate-fade-in-up delay-5" data-testid="lead-table-section">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#667eea]/20 to-[#764ba2]/10 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-[#667eea]" />
+              </div>
+              <h2 className="text-white" style={{ fontFamily: 'Space Grotesk' }}>Lead Pipeline</h2>
+              <span className="px-4 py-1.5 bg-gradient-to-r from-[#667eea]/20 to-[#764ba2]/10 text-[#667eea] text-sm rounded-full font-data border border-[#667eea]/20">
+                {leads.length} leads
+              </span>
+            </div>
+          </div>
+
+          <div className="glass-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full" data-testid="leads-table">
-                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Score
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Category
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Phone
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Service
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Source
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Location
-                    </th>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/5">
+                    <th className="px-6 py-5 text-left text-xs font-semibold text-[#71717a] uppercase tracking-wider">Score</th>
+                    <th className="px-6 py-5 text-left text-xs font-semibold text-[#71717a] uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-5 text-left text-xs font-semibold text-[#71717a] uppercase tracking-wider">Name</th>
+                    <th className="px-6 py-5 text-left text-xs font-semibold text-[#71717a] uppercase tracking-wider">Phone</th>
+                    <th className="px-6 py-5 text-left text-xs font-semibold text-[#71717a] uppercase tracking-wider">Service</th>
+                    <th className="px-6 py-5 text-left text-xs font-semibold text-[#71717a] uppercase tracking-wider">Source</th>
+                    <th className="px-6 py-5 text-left text-xs font-semibold text-[#71717a] uppercase tracking-wider">Location</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {leads.map((lead) => (
-                    <tr
-                      key={lead.id}
-                      onClick={() => handleLeadClick(lead)}
-                      className="lead-row cursor-pointer"
-                      data-testid={`lead-row-${lead.id}`}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center justify-center w-12 h-12 rounded-full font-bold text-lg font-data score-badge ${
-                            lead.score >= 70
-                              ? "bg-emerald-100 text-emerald-700"
-                              : lead.score >= 40
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-slate-100 text-slate-700"
-                          }`}
-                        >
-                          {lead.score}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getCategoryBadgeClass(
-                            lead.category
-                          )}`}
-                        >
-                          {getCategoryIcon(lead.category)} {lead.category}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{lead.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-data">{lead.phone}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{lead.service_interest}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{lead.source}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{lead.location}</td>
-                    </tr>
-                  ))}
+                <tbody>
+                  {leads.map((lead, index) => {
+                    const config = getCategoryConfig(lead.category);
+                    return (
+                      <tr
+                        key={lead.id}
+                        onClick={() => handleLeadClick(lead)}
+                        className="lead-row cursor-pointer"
+                        style={{ animationDelay: `${index * 0.05}s` }}
+                      >
+                        <td className="px-6 py-5">
+                          <span className={`score-badge inline-flex items-center justify-center w-14 h-14 rounded-2xl font-bold text-lg ${config.scoreClass}`}>
+                            {lead.score}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5">
+                          <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold ${config.badge}`}>
+                            {config.icon}
+                            {lead.category}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5 text-white font-medium">{lead.name}</td>
+                        <td className="px-6 py-5 text-[#a1a1aa] font-data text-sm">{lead.phone}</td>
+                        <td className="px-6 py-5 text-[#a1a1aa] text-sm">{lead.service_interest}</td>
+                        <td className="px-6 py-5 text-[#a1a1aa] text-sm">{lead.source}</td>
+                        <td className="px-6 py-5 text-[#a1a1aa] text-sm">{lead.location}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+
             {leads.length === 0 && (
-              <div className="text-center py-12" data-testid="no-leads-message">
-                <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500">No leads uploaded yet. Upload a CSV file to get started.</p>
+              <div className="text-center py-20">
+                <div className="relative inline-block mb-6">
+                  <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#667eea]/10 to-[#764ba2]/5 flex items-center justify-center">
+                    <Users className="w-12 h-12 text-[#52525b]" />
+                  </div>
+                </div>
+                <p className="text-[#a1a1aa] text-lg mb-2">No leads imported yet</p>
+                <p className="text-[#52525b] text-sm">Upload your first CSV to unlock AI-powered insights</p>
               </div>
             )}
           </div>
-        </div>
+        </section>
       </div>
 
+      {/* Lead Details Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:w-[540px] overflow-y-auto" data-testid="lead-details-sheet">
+        <SheetContent className="w-full sm:w-[560px] overflow-y-auto bg-[#0a0a0f]/98 backdrop-blur-xl border-l border-white/5">
           {selectedLead && (
             <>
-              <SheetHeader>
-                <SheetTitle className="text-2xl font-bold" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                  {selectedLead.name}
-                </SheetTitle>
-                <SheetDescription asChild>
-                  <div className="space-y-3 mt-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Lead Score:</span>
-                      <span
-                        className={`inline-flex items-center justify-center w-14 h-14 rounded-full font-bold text-xl font-data ${
-                          selectedLead.score >= 70
-                            ? "bg-emerald-100 text-emerald-700"
-                            : selectedLead.score >= 40
-                            ? "bg-amber-100 text-amber-700"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {selectedLead.score}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Category:</span>
-                      <span
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getCategoryBadgeClass(
-                          selectedLead.category
-                        )}`}
-                      >
-                        {getCategoryIcon(selectedLead.category)} {selectedLead.category}
-                      </span>
-                    </div>
-                    <div className="pt-3 border-t border-slate-200">
-                      <div className="text-sm text-slate-600"><strong>Phone:</strong> {selectedLead.phone}</div>
-                      {selectedLead.email && <div className="text-sm text-slate-600"><strong>Email:</strong> {selectedLead.email}</div>}
-                      <div className="text-sm text-slate-600"><strong>Service:</strong> {selectedLead.service_interest}</div>
-                      <div className="text-sm text-slate-600"><strong>Source:</strong> {selectedLead.source}</div>
-                      <div className="text-sm text-slate-600"><strong>Location:</strong> {selectedLead.location}</div>
-                    </div>
+              <SheetHeader className="pb-6 border-b border-white/5">
+                <div className="flex items-start gap-5">
+                  <div className={`w-20 h-20 rounded-2xl flex items-center justify-center font-bold text-2xl font-data ${getCategoryConfig(selectedLead.category).scoreClass}`}>
+                    {selectedLead.score}
                   </div>
-                </SheetDescription>
+                  <div className="flex-1">
+                    <SheetTitle className="text-2xl font-bold text-white mb-2" style={{ fontFamily: 'Space Grotesk' }}>
+                      {selectedLead.name}
+                    </SheetTitle>
+                    <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold ${getCategoryConfig(selectedLead.category).badge}`}>
+                      {getCategoryConfig(selectedLead.category).icon}
+                      {selectedLead.category} Lead
+                    </span>
+                  </div>
+                </div>
               </SheetHeader>
 
-              <div className="mt-8" data-testid="ai-messages-section">
-                <h3 className="text-lg font-bold text-slate-900 mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                  AI-Generated Follow-Up Messages
-                </h3>
+              <SheetDescription asChild>
+                <div className="space-y-6 pt-6">
+                  {/* Contact Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { label: 'Phone', value: selectedLead.phone, mono: true },
+                      { label: 'Email', value: selectedLead.email || '—' },
+                      { label: 'Service', value: selectedLead.service_interest },
+                      { label: 'Source', value: selectedLead.source },
+                      { label: 'Location', value: selectedLead.location },
+                    ].map((item) => (
+                      <div key={item.label} className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+                        <p className="text-[#52525b] text-xs uppercase tracking-wider mb-1">{item.label}</p>
+                        <p className={`text-white ${item.mono ? 'font-data' : ''}`}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </SheetDescription>
+
+              {/* AI Messages */}
+              <div className="mt-8">
+                <div className="flex items-center gap-2 mb-6">
+                  <Sparkles className="w-5 h-5 text-[#f093fb]" />
+                  <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Space Grotesk' }}>
+                    AI-Generated Outreach
+                  </h3>
+                </div>
 
                 {loadingMessages ? (
                   <div className="space-y-4">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="animate-pulse">
-                        <div className="h-4 bg-slate-200 rounded w-1/3 mb-2"></div>
-                        <div className="h-20 bg-slate-200 rounded"></div>
+                      <div key={i} className="p-5 rounded-xl bg-white/[0.02] border border-white/5">
+                        <div className="skeleton h-4 w-24 mb-4" />
+                        <div className="skeleton h-20 w-full" />
                       </div>
                     ))}
                   </div>
                 ) : aiMessages ? (
-                  <div className="space-y-6">
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4" data-testid="whatsapp-message">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center">
-                          <MessageSquare className="w-5 h-5 text-green-600 mr-2" />
-                          <h4 className="font-semibold text-slate-900">WhatsApp</h4>
+                  <div className="space-y-4">
+                    {/* WhatsApp */}
+                    <div className="message-card message-whatsapp">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="w-5 h-5 text-[#25d366]" />
+                          <h4 className="font-semibold text-white">WhatsApp</h4>
                         </div>
                         <button
-                          onClick={() => copyToClipboard(aiMessages.whatsapp, "WhatsApp message")}
-                          className="p-2 hover:bg-green-100 rounded"
-                          data-testid="copy-whatsapp-btn"
+                          onClick={() => copyToClipboard(aiMessages.whatsapp, "WhatsApp")}
+                          className="p-2 hover:bg-[#25d366]/10 rounded-lg transition-all"
                         >
-                          <Copy className="w-4 h-4 text-green-600" />
+                          <Copy className="w-4 h-4 text-[#25d366]" />
                         </button>
                       </div>
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{aiMessages.whatsapp}</p>
+                      <p className="text-[#a1a1aa] text-sm leading-relaxed whitespace-pre-wrap">{aiMessages.whatsapp}</p>
                     </div>
 
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4" data-testid="email-message">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center">
-                          <Mail className="w-5 h-5 text-blue-600 mr-2" />
-                          <h4 className="font-semibold text-slate-900">Email</h4>
+                    {/* Email */}
+                    <div className="message-card message-email">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-5 h-5 text-[#3b82f6]" />
+                          <h4 className="font-semibold text-white">Email</h4>
                         </div>
                         <button
-                          onClick={() => copyToClipboard(aiMessages.email, "Email message")}
-                          className="p-2 hover:bg-blue-100 rounded"
-                          data-testid="copy-email-btn"
+                          onClick={() => copyToClipboard(aiMessages.email, "Email")}
+                          className="p-2 hover:bg-[#3b82f6]/10 rounded-lg transition-all"
                         >
-                          <Copy className="w-4 h-4 text-blue-600" />
+                          <Copy className="w-4 h-4 text-[#3b82f6]" />
                         </button>
                       </div>
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{aiMessages.email}</p>
+                      <p className="text-[#a1a1aa] text-sm leading-relaxed whitespace-pre-wrap">{aiMessages.email}</p>
                     </div>
 
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4" data-testid="call-script">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center">
-                          <Phone className="w-5 h-5 text-purple-600 mr-2" />
-                          <h4 className="font-semibold text-slate-900">Call Script</h4>
+                    {/* Call */}
+                    <div className="message-card message-call">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-5 h-5 text-[#a855f7]" />
+                          <h4 className="font-semibold text-white">Call Script</h4>
                         </div>
                         <button
                           onClick={() => copyToClipboard(aiMessages.call_script, "Call script")}
-                          className="p-2 hover:bg-purple-100 rounded"
-                          data-testid="copy-call-btn"
+                          className="p-2 hover:bg-[#a855f7]/10 rounded-lg transition-all"
                         >
-                          <Copy className="w-4 h-4 text-purple-600" />
+                          <Copy className="w-4 h-4 text-[#a855f7]" />
                         </button>
                       </div>
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{aiMessages.call_script}</p>
+                      <p className="text-[#a1a1aa] text-sm leading-relaxed whitespace-pre-wrap">{aiMessages.call_script}</p>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-slate-500">Failed to load AI messages</p>
+                  <p className="text-[#71717a]">Unable to load AI messages</p>
                 )}
               </div>
             </>

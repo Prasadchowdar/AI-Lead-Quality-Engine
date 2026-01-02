@@ -1,46 +1,7 @@
+/* ==========================================================================
+   Lead Forge - Additional Component Styles
+   ========================================================================== */
+
 .App {
   min-height: 100vh;
-}
-
-.upload-dropzone {
-  border: 2px dashed #cbd5e1;
-  transition: border-color 0.2s, background-color 0.2s;
-}
-
-.upload-dropzone:hover {
-  border-color: #4f46e5;
-  background-color: #f8fafc;
-}
-
-.lead-row {
-  transition: background-color 0.15s;
-}
-
-.lead-row:hover {
-  background-color: #f8fafc;
-}
-
-.score-badge {
-  transition: transform 0.2s;
-}
-
-.score-badge:hover {
-  transform: scale(1.05);
-}
-
-.stat-card {
-  transition: box-shadow 0.2s, transform 0.2s;
-}
-
-.stat-card:hover {
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
-  transform: translateY(-2px);
-}
-
-button {
-  transition: background-color 0.2s, transform 0.1s;
-}
-
-button:active {
-  transform: scale(0.98);
 }

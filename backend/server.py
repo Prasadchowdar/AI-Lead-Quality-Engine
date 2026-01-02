@@ -1,7 +1,6 @@
 from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
@@ -11,18 +10,21 @@ import uuid
 from datetime import datetime, timezone, time as dt_time
 import csv
 import io
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from openai import OpenAI
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Initialize OpenAI client
+openai_client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+# In-memory storage for leads (replaces MongoDB)
+leads_db: List[dict] = []
+
+# Scoring configuration - hardcoded for demo
 TARGET_CITIES = ['Hyderabad', 'Vizag', 'Bengaluru']
 HIGH_INTENT_SERVICES = [
     'Real Estate Marketing',
@@ -77,18 +79,34 @@ class DashboardStats(BaseModel):
     best_time_of_day: str
 
 def calculate_lead_score(lead_data: dict) -> tuple[int, str]:
-    """Calculate lead score based on rule-based logic"""
+    """
+    Calculate lead score based on rule-based logic.
+    
+    Scoring rules:
+    - High intent service → +25
+    - Location matches target city → +20
+    - Source = Google Ads or Website → +20
+    - Submitted during business hours (9 AM - 6 PM) → +15
+    - Email present → +10
+    - Base score → +10
+    
+    Score range: 0-100
+    """
     score = 0
     
+    # High intent service check (+25)
     if lead_data['service_interest'] in HIGH_INTENT_SERVICES:
         score += 25
     
+    # Location matches target city (+20)
     if lead_data['location'] in TARGET_CITIES:
         score += 20
     
+    # High value source (+20)
     if lead_data['source'] in HIGH_VALUE_SOURCES:
         score += 20
     
+    # Business hours check (+15)
     try:
         lead_time = datetime.fromisoformat(lead_data['timestamp'])
         if dt_time(9, 0) <= lead_time.time() <= dt_time(18, 0):
@@ -96,13 +114,17 @@ def calculate_lead_score(lead_data: dict) -> tuple[int, str]:
     except:
         pass
     
+    # Email present (+10)
     if lead_data.get('email'):
         score += 10
     
+    # Base score (+10)
     score += 10
     
+    # Cap at 100
     score = min(score, 100)
     
+    # Categorization
     if score >= 70:
         category = "Hot"
     elif score >= 40:
@@ -113,16 +135,11 @@ def calculate_lead_score(lead_data: dict) -> tuple[int, str]:
     return score, category
 
 async def generate_ai_messages(lead: Lead) -> AIMessages:
-    """Generate AI-powered follow-up messages"""
+    """
+    Generate AI-powered follow-up messages using OpenAI.
+    Falls back to template messages if API fails.
+    """
     try:
-        api_key = os.environ.get('EMERGENT_LLM_KEY')
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"lead_{lead.id}",
-            system_message="You are a professional marketing communication expert. Generate concise, friendly, and conversion-focused messages."
-        )
-        chat.with_model("openai", "gpt-5.2")
-        
         prompt = f"""Generate follow-up messages for this lead:
 Name: {lead.name}
 Service Interest: {lead.service_interest}
@@ -134,7 +151,7 @@ Generate 3 messages:
 2. Email message (professional subject + body, max 5 lines)
 3. Call opening script (warm, conversational, max 3 lines)
 
-Format:
+Format your response EXACTLY like this:
 WHATSAPP:
 [message]
 
@@ -144,21 +161,70 @@ EMAIL:
 CALL:
 [message]"""
         
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a professional marketing communication expert. Generate concise, friendly, and conversion-focused messages."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
         
-        parts = response.split('\n\n')
+        response_text = response.choices[0].message.content
+        
+        # Parse the response
         whatsapp_msg = ""
         email_msg = ""
         call_msg = ""
         
-        for part in parts:
-            if part.startswith('WHATSAPP:'):
-                whatsapp_msg = part.replace('WHATSAPP:', '').strip()
-            elif part.startswith('EMAIL:'):
-                email_msg = part.replace('EMAIL:', '').strip()
-            elif part.startswith('CALL:'):
-                call_msg = part.replace('CALL:', '').strip()
+        # Split by sections
+        sections = response_text.split('\n\n')
+        current_section = None
+        
+        for section in sections:
+            if section.strip().startswith('WHATSAPP:'):
+                whatsapp_msg = section.replace('WHATSAPP:', '').strip()
+            elif section.strip().startswith('EMAIL:'):
+                email_msg = section.replace('EMAIL:', '').strip()
+            elif section.strip().startswith('CALL:'):
+                call_msg = section.replace('CALL:', '').strip()
+        
+        # If parsing didn't work well, try line-by-line
+        if not whatsapp_msg or not email_msg or not call_msg:
+            lines = response_text.split('\n')
+            current_section = None
+            section_content = []
+            
+            for line in lines:
+                if 'WHATSAPP:' in line:
+                    if current_section and section_content:
+                        if current_section == 'whatsapp':
+                            whatsapp_msg = '\n'.join(section_content).strip()
+                        elif current_section == 'email':
+                            email_msg = '\n'.join(section_content).strip()
+                        elif current_section == 'call':
+                            call_msg = '\n'.join(section_content).strip()
+                    current_section = 'whatsapp'
+                    section_content = [line.replace('WHATSAPP:', '').strip()]
+                elif 'EMAIL:' in line:
+                    if current_section and section_content:
+                        if current_section == 'whatsapp':
+                            whatsapp_msg = '\n'.join(section_content).strip()
+                    current_section = 'email'
+                    section_content = [line.replace('EMAIL:', '').strip()]
+                elif 'CALL:' in line:
+                    if current_section and section_content:
+                        if current_section == 'email':
+                            email_msg = '\n'.join(section_content).strip()
+                    current_section = 'call'
+                    section_content = [line.replace('CALL:', '').strip()]
+                elif current_section:
+                    section_content.append(line)
+            
+            # Capture the last section
+            if current_section == 'call' and section_content:
+                call_msg = '\n'.join(section_content).strip()
         
         return AIMessages(
             whatsapp=whatsapp_msg or f"Hi {lead.name}! We saw your interest in {lead.service_interest}. Let's discuss how we can help you grow!",
@@ -167,6 +233,7 @@ CALL:
         )
     except Exception as e:
         logging.error(f"AI generation failed: {e}")
+        # Fallback template messages
         return AIMessages(
             whatsapp=f"Hi {lead.name}! We saw your interest in {lead.service_interest}. Can we schedule a quick call to discuss your needs?",
             email=f"Subject: Your {lead.service_interest} Inquiry\n\nHi {lead.name},\n\nThank you for reaching out regarding {lead.service_interest}. We'd love to help you achieve your marketing goals in {lead.location}.\n\nBest regards,\nMarketing Team",
@@ -201,7 +268,8 @@ async def upload_leads(file: UploadFile = File(...)):
             doc = lead.model_dump()
             doc['created_at'] = doc['created_at'].isoformat()
             
-            await db.leads.insert_one(doc)
+            # Store in memory
+            leads_db.append(doc)
             leads_created.append(lead)
         
         return {"success": True, "count": len(leads_created), "message": f"Successfully uploaded {len(leads_created)} leads"}
@@ -210,19 +278,21 @@ async def upload_leads(file: UploadFile = File(...)):
 
 @api_router.get("/leads", response_model=List[Lead])
 async def get_leads():
-    """Get all leads"""
-    leads = await db.leads.find({}, {"_id": 0}).sort("score", -1).to_list(1000)
+    """Get all leads sorted by score (descending)"""
+    # Sort by score descending
+    sorted_leads = sorted(leads_db, key=lambda x: x['score'], reverse=True)
     
-    for lead in leads:
+    # Convert created_at strings back to datetime for response
+    for lead in sorted_leads:
         if isinstance(lead.get('created_at'), str):
             lead['created_at'] = datetime.fromisoformat(lead['created_at'])
     
-    return leads
+    return sorted_leads
 
 @api_router.get("/leads/{lead_id}", response_model=LeadWithMessages)
 async def get_lead_with_messages(lead_id: str):
     """Get lead with AI-generated messages"""
-    lead_data = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    lead_data = next((lead for lead in leads_db if lead['id'] == lead_id), None)
     
     if not lead_data:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -241,20 +311,20 @@ async def get_lead_with_messages(lead_id: str):
 @api_router.get("/dashboard", response_model=DashboardStats)
 async def get_dashboard_stats():
     """Get dashboard statistics"""
-    all_leads = await db.leads.find({}, {"_id": 0}).to_list(1000)
+    total_leads = len(leads_db)
+    hot_count = sum(1 for lead in leads_db if lead['category'] == 'Hot')
+    warm_count = sum(1 for lead in leads_db if lead['category'] == 'Warm')
+    cold_count = sum(1 for lead in leads_db if lead['category'] == 'Cold')
     
-    total_leads = len(all_leads)
-    hot_count = sum(1 for lead in all_leads if lead['category'] == 'Hot')
-    warm_count = sum(1 for lead in all_leads if lead['category'] == 'Warm')
-    cold_count = sum(1 for lead in all_leads if lead['category'] == 'Cold')
-    
+    # Source distribution
     source_distribution = {}
-    for lead in all_leads:
+    for lead in leads_db:
         source = lead['source']
         source_distribution[source] = source_distribution.get(source, 0) + 1
     
+    # Best time of day calculation
     hour_counts = {}
-    for lead in all_leads:
+    for lead in leads_db:
         try:
             lead_time = datetime.fromisoformat(lead['timestamp'])
             hour = lead_time.hour
@@ -289,8 +359,10 @@ async def get_dashboard_stats():
 @api_router.delete("/leads")
 async def delete_all_leads():
     """Delete all leads (for demo purposes)"""
-    result = await db.leads.delete_many({})
-    return {"success": True, "deleted_count": result.deleted_count}
+    global leads_db
+    deleted_count = len(leads_db)
+    leads_db = []
+    return {"success": True, "deleted_count": deleted_count}
 
 app.include_router(api_router)
 
@@ -307,7 +379,3 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
